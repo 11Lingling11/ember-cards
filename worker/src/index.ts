@@ -27,11 +27,14 @@ function sameSecret(a: string, b: string): boolean {
 function authorized(request: Request, env: Env): boolean {
   const expected = env.EMBER_API_KEY
   if (!expected) return false
+  const url = new URL(request.url)
   const auth = request.headers.get('authorization') ?? ''
   const bearer = auth.startsWith('Bearer ') ? auth.slice(7).trim() : ''
   const apiKey = (request.headers.get('x-api-key') ?? '').trim()
+  const queryToken = (url.searchParams.get('token') ?? '').trim()
   return (bearer.length > 0 && sameSecret(bearer, expected)) ||
-    (apiKey.length > 0 && sameSecret(apiKey, expected))
+    (apiKey.length > 0 && sameSecret(apiKey, expected)) ||
+    (queryToken.length > 0 && sameSecret(queryToken, expected))
 }
 
 export class Table extends DurableObject<Env> {
