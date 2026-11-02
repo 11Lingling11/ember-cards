@@ -6,12 +6,30 @@ import type { GameState } from '../../src/engine/game.ts'
 
 export interface Env {
   TABLE: DurableObjectNamespace<Table>
+  // 用 `wrangler secret put EMBER_API_KEY` 或 Cloudflare 控制台 Secret 注入。
+  // 绝不能把真实密钥写进仓库。
+  EMBER_API_KEY?: string
 }
 
 const JSON_HEADERS = { 'content-type': 'application/json; charset=utf-8' }
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: JSON_HEADERS })
+}
+
+function sameSecret(a: string, b: string): boolean {
+  if (a.length !== b.length) return false
+  let mismatch = 0
+  for (let i = 0; i < a.length; i += 1) mismatch |= a.charCodeAt(i) ^ b.charCodeAt(i)
+  return mismatch === 0
+}
+
+function authorized(request: Request, env: Env): boolean {
+  const expected = env.EMBER_API_KEY
+  if (!expected) return false
+  const auth = request.headers.get('authorization') ?? ''
+  const supplied = auth.startsWith('Bearer ') ? auth.slice(7).trim() : ''
+  return supplied.length > 0 && sameSecret(supplied, expected)
 }
 
 export class Table extends DurableObject<Env> {
@@ -40,6 +58,13 @@ export default {
       })
     }
     if (url.pathname !== '/mcp') return json({ error: 'not found' }, 404)
+    if (!env.EMBER_API_KEY) return json({ error: 'server auth is not configured' }, 503)
+    if (!authorized(request, env)) {
+      return new Response(JSON.stringify({ error: 'unauthorized' }), {
+        status: 401,
+        headers: { ...JSON_HEADERS, 'www-authenticate': 'Bearer realm="ember-cards"' },
+      })
+    }
     if (request.method === 'GET') return json({ error: 'SSE stream not offered; use POST' }, 405)
     if (request.method === 'DELETE') return new Response(null, { status: 204 })
     if (request.method !== 'POST') return json({ error: 'method not allowed' }, 405)
