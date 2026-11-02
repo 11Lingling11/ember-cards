@@ -28,8 +28,10 @@ function authorized(request: Request, env: Env): boolean {
   const expected = env.EMBER_API_KEY
   if (!expected) return false
   const auth = request.headers.get('authorization') ?? ''
-  const supplied = auth.startsWith('Bearer ') ? auth.slice(7).trim() : ''
-  return supplied.length > 0 && sameSecret(supplied, expected)
+  const bearer = auth.startsWith('Bearer ') ? auth.slice(7).trim() : ''
+  const apiKey = (request.headers.get('x-api-key') ?? '').trim()
+  return (bearer.length > 0 && sameSecret(bearer, expected)) ||
+    (apiKey.length > 0 && sameSecret(apiKey, expected))
 }
 
 export class Table extends DurableObject<Env> {
